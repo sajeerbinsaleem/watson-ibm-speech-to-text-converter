@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tuna Speech to Text client example</title>
+  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6" crossorigin="anonymous">
+<style>
+  .output{
+    padding-top: 50px;
+  }
+  body{
+    padding-top: 50px;
+  }
+  .robot {
+      text-align: right;
+      /* padding-right: 26px; */
+      padding-left: 70px;
+  }
+  .customer {
+      /* padding-right: 26px; */
+      padding-right: 70px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title">Transcribe from Microphone</h5>
+      <div class="row" style="padding-top: 20px;">
+        <div class="col-3">
+           <button type="button" class="btn btn-sm btn-outline-success btn-block" id="button" style="width: 100%;">Record</button>
+        </div>
+        <div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-danger btn-block" id="stop" style="width: 100%;">Stop</button>
+        </div>
+	<div class="col-3">
+          <button type="button" class="btn btn-sm btn-outline-warning btn-block" id="user_click" style="width: 100%;">load</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col">
+          <p id="recording"></p>
+        </div>
+      </div>
+      <div class="row output">
+        <div class="col-12 customer">
+          <h2>Output:</h2>
+          <div class="alert alert-info" role="alert" id="output">
+          </div>
+        </div>
+        <div class="col-12 robot" >
+          <h2>Robot:</h2>
+          <div class="alert alert-primary" role="alert" id="robot">
+          </div>
+        </div>
+      </div>
+
+      
+    </div>
+  </div>
+
+
+<script src="scripts/watson-speech/dist/watson-speech.js"></script>
+<!-- window.fetch pollyfill for IE/Edge & Older Chrome/FireFox -->
+<script src="scripts/fetch/dist/fetch.umd.js"></script>
+<script src="/Api.js"></script>
+
+
+</div>
+<script >
+  window.onload = function() {
+	var context = new AudioContext();
+ 	document.getElementById('user_click').click();
+	var e = document.createEvent('MouseEvent');
+e.initUIEvent('touchstart', true, true);
+//Fix 2
+document.dispatchEvent(e);
+console.log('touch event triggered'); 
+   Api.getSessionId(function() {
+            // Api.sendRequest('', true);
+	window.parent.postMessage({
+            'action_type':'widget_loaded',
+            'response_string':'loaded',
+            'response_json': 'loaded',
+        }, "*");
+          });
+};
+
+	document.querySelector('#user_click').onclick = function() {
+    console.log('event button clicked');
+
+  };
+  document.querySelector('#button').onclick = function() {
+	var context = new AudioContext();
+	console.log('device status', context.state);
+    if(context.state != 'running'){
+      window.parent.postMessage({
+            'action_type':'device_connected',
+            'response_string':false,
+            'response_json': 'false',
+        }, "*");
+    } else {
+      window.parent.postMessage({
+            'action_type':'device_connected',
+            'response_string':true,
+            'response_json': 'true',
+        }, "*");
+    }
+ 
+   var watson_text = '';
+    // Api.getSessionId(function() {
+    //         // Api.sendRequest('', true);
+    //       });
+    document.getElementById("recording").innerHTML = "Recording..";
+    fetch('/api/speech-to-text/token')
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(token) {
+        var stream = WatsonSpeech.SpeechToText.recognizeMicrophone(Object.assign(token, { // eslint-disable-line
+          // outputElement: '#output' // CSS selector or DOM Element
+          objectMode: true,
+          interimResults:true,
+          wordConfidence:true,
+          smartFormatting:true,
+        //  inactivityTimeout: -1,
+        }));
+        
+        stream.on('error', function(err) {
+          console.log(err);
+        });
+
+        // stream.setEncoding('utf8'); // get text instead of Buffers for on data events
+
+        stream.on('data', function(data) {
+          console.log('rest',  data.results[0].alternatives[0].transcript );
+          if(data.results.length > 0){
+              var results = data.results[0];
+              if(results.final){
+                var res = results.alternatives;
+                var textObj = res[0];
+                var txt = textObj.transcript;
+                document.getElementById("output").innerHTML = txt;
+                watson_text += txt;
+                sendMessage(txt);
+                 window.parent.postMessage({
+                      'action_type':'speech_response',
+                      'response_string':JSON.stringify(data),
+                      'response_json': data,
+                  }, "*");
+
+              }
+		else{
+                window.parent.postMessage({
+                      'action_type':'intermediate_response',
+                      'response_string':JSON.stringify(data),
+                      'response_json': data,
+                  }, "*");
+              } 
+         }
+          // document.getElementById("output").innerHTML += data;
+          // watson_text += data;
+          // sendMessage(watson_text);
+          
+          // window.parent.postMessage({
+          //       'action_type':'speech_response',
+          //       'response_string':JSON.stringify(data),
+          //       'response_json': data,
+          //   }, "*");
+
+        });
+        
+  
+        document.querySelector('#stop').onclick = function() {
+          document.getElementById("recording").innerHTML = " ";
+          document.getElementById("output").innerHTML += "<br><br> ";
+          
+          watson_text = '';
+          stream.stop();
+		 window.parent.postMessage({
+            'action_type':'device_connected',
+            'response_string':false,
+            'response_json': 'false',
+        }, "*");
+        };
+      })
+      .catch(function(error) {
+        console.log(error);
+      });
+  };
+  function sendMessage(text) {
+    // Send the user message
+    Api.sendRequest(text, false);
+  }
+  
+  var b;
+  // you might want to write these into if statements to make sure that e.data[0] is varA if you have multiple messages coming across
+  if (typeof window.addEventListener != 'undefined') {
+      window.addEventListener('message', function(e) {
+          if(e.data.action_type == 'start'){
+            var strt_btn = document.querySelector('#button');
+            strt_btn.click();
+          } 
+          else if(e.data.action_type == 'stop'){
+            var stp_btn = document.querySelector('#stop');
+            stp_btn.click();
+
+          }
+          else if(e.data.action_type == 'load_assistant'){
+            console.log('loaded')
+            // Api.sendRequest('ssss', true);
+            Api.sendRequest('', true);
+
+          }
+      }, false);
+  } 
+  else if (typeof window.attachEvent != 'undefined') { // this part is for IE8
+      window.attachEvent('onmessage', function(e) {
+        if(e.data.action_type == 'start'){
+            var strt_btn = document.querySelector('#button');
+            strt_btn.click();
+          } 
+          else if(e.data.action_type == 'stop'){
+            var stp_btn = document.querySelector('#stop');
+            stp_btn.click();
+
+          }
+      });
+  }
+  </script>
+</body>
+</html>
