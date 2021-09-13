@@ -7,6 +7,9 @@ var Api = (function() {
     var messageEndpoint = '/api/message';
   
     var sessionEndpoint = '/api/session';
+
+    var apikeyEndpoint = '/api/set_auth_key';
+    var getApikeyEndpoint = '/api/get_auth_key';
   
     var sessionId = null;
   
@@ -14,6 +17,8 @@ var Api = (function() {
     return {
       sendRequest: sendRequest,
       getSessionId: getSessionId,
+      setApi: setApi,
+      getApi : getApi,
   
       // The request/response getters/setters are defined here to prevent internal methods
       // from calling the methods without any of the callbacks that are added elsewhere.
@@ -33,7 +38,20 @@ var Api = (function() {
       setErrorPayload: function() {
       }
     };
-  
+    function getApi() {
+      var http = new XMLHttpRequest();
+      http.open('GET', getApikeyEndpoint, true);
+      http.setRequestHeader('Content-type', 'application/json');
+      http.onreadystatechange = function () {
+        if (http.readyState === XMLHttpRequest.DONE) {
+          var res = JSON.parse(http.response);
+        //   sessionId = res.result.session_id;
+          console.log('http.response get id',http.response)
+         
+        }
+      };
+      http.send();
+    }
     function getSessionId(callback) {
       var http = new XMLHttpRequest();
       http.open('GET', sessionEndpoint, true);
@@ -101,6 +119,44 @@ var Api = (function() {
         Api.setRequestPayload(params);
       }
   
+      // Send request
+      http.send(params);
+    }
+    // Send a message request to the server
+    function setApi(assistant_key, assistant_id, assistant_url, speech_key, speech_url) {
+      if(!assistant_key || !assistant_id || !assistant_url || !speech_key || !speech_url){
+        console.log('error sending keys to redis')
+        return;
+      }
+      let obj = {
+        assistant_key : assistant_key,
+        assistant_id : assistant_id,
+        assistant_url : assistant_url,
+        speech_key : speech_key,
+        speech_url : speech_url,
+      }
+      // Built http request
+      var http = new XMLHttpRequest();
+      http.open('POST', apikeyEndpoint, true);
+      http.setRequestHeader('Content-type', 'application/json');
+      http.onreadystatechange = function () {
+        if (http.readyState === XMLHttpRequest.DONE && http.status === 200 && http.responseText) {
+          console.log('http.responseText',JSON.parse(http.response))
+          var jsn = JSON.parse(http.response)
+          window.parent.postMessage({
+              'action_type':'api_key',
+              'response_string':'successfully assigned api keys ',
+          }, "*");
+         sendRequest('', true);
+          return 'sucess';
+
+
+        } else if (http.readyState === XMLHttpRequest.DONE && http.status !== 200) {
+          
+          return 'error';
+        }
+      };
+      var params = JSON.stringify(obj);
       // Send request
       http.send(params);
     }

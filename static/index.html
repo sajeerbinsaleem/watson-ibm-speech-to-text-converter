@@ -73,6 +73,9 @@
 <script >
   window.onload = function() {
 	var context = new AudioContext();
+
+Api.getApi();
+
  	document.getElementById('user_click').click();
 	var e = document.createEvent('MouseEvent');
 e.initUIEvent('touchstart', true, true);
@@ -81,16 +84,17 @@ document.dispatchEvent(e);
 console.log('touch event triggered'); 
    Api.getSessionId(function() {
             // Api.sendRequest('', true);
-	window.parent.postMessage({
-            'action_type':'widget_loaded',
-            'response_string':'loaded',
-            'response_json': 'loaded',
-        }, "*");
+            window.parent.postMessage({
+                'action_type':'widget_loaded',
+                'response_string':'loaded',
+                'response_json': 'loaded',
+            }, "*");
           });
 };
 
+
 	document.querySelector('#user_click').onclick = function() {
-    console.log('event button clicked');
+    Api.setApi('qpwUvPnQ2piomi3lGJPh4sqwa8ZvRtkEoG4qDjhlYxW1','256ffa4d-5070-4dc8-9cb1-33d0b77873b2','https://api.us-south.assistant.watson.cloud.ibm.com/instances/da5aab5f-2601-4bcc-8f03-a943d19dabb5','FJy0PGIKijdNzQcp2c08CU_Qv1ATZO8hnqJApgTRM6rI','https://api.us-south.speech-to-text.watson.cloud.ibm.com/instances/15fc611d-9d5a-4482-aa65-2960e87f8c46')
 
   };
   document.querySelector('#button').onclick = function() {
@@ -161,15 +165,6 @@ console.log('touch event triggered');
                   }, "*");
               } 
          }
-          // document.getElementById("output").innerHTML += data;
-          // watson_text += data;
-          // sendMessage(watson_text);
-          
-          // window.parent.postMessage({
-          //       'action_type':'speech_response',
-          //       'response_string':JSON.stringify(data),
-          //       'response_json': data,
-          //   }, "*");
 
         });
         
@@ -180,11 +175,11 @@ console.log('touch event triggered');
           
           watson_text = '';
           stream.stop();
-		 window.parent.postMessage({
-            'action_type':'device_connected',
-            'response_string':false,
-            'response_json': 'false',
-        }, "*");
+		      window.parent.postMessage({
+              'action_type':'device_connected',
+              'response_string':false,
+              'response_json': 'false',
+          }, "*");
         };
       })
       .catch(function(error) {
@@ -212,7 +207,9 @@ console.log('touch event triggered');
           else if(e.data.action_type == 'load_assistant'){
             console.log('loaded')
             // Api.sendRequest('ssss', true);
-            Api.sendRequest('', true);
+            Api.setApi(e.data.assistant_key, e.data.assistant_id, e.data.assistant_url, e.data.speech_key, e.data.speech_url);
+            // Api.setApi('qpwUvPnQ2piomi3lGJPh4sqwa8ZvRtkEoG4qDjhlYxW1','256ffa4d-5070-4dc8-9cb1-33d0b77873b2','https://api.us-south.assistant.watson.cloud.ibm.com/instances/da5aab5f-2601-4bcc-8f03-a943d19dabb5','FJy0PGIKijdNzQcp2c08CU_Qv1ATZO8hnqJApgTRM6rI','https://api.us-south.speech-to-text.watson.cloud.ibm.com/instances/15fc611d-9d5a-4482-aa65-2960e87f8c46');
+            
 
           }
       }, false);

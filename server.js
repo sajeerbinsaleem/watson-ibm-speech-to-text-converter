@@ -26,6 +26,9 @@ const webpackConfig = require('./webpack.config');
 const { IamTokenManager } = require('ibm-watson/auth');
 var IamAuthenticator = require('ibm-watson/auth').IamAuthenticator;
 var AssistantV2 = require('ibm-watson/assistant/v2'); // watson sdk
+const redis = require("redis");
+const redisPort = process.env.redisPort?process.env.redisPort:6379;
+const Redisclient = redis.createClient(redisPort,{ db: 0 });
 // allows environment properties to be set in a file named .env
 require('dotenv').config({ silent: true });
 
@@ -73,19 +76,13 @@ app.use(
   })
 );
 
-const sttAuthenticator = new IamTokenManager({
-  apikey: process.env.SPEECH_TO_TEXT_IAM_APIKEY
-});
+// const sttAuthenticator = new IamTokenManager({
+//   apikey: process.env.SPEECH_TO_TEXT_IAM_APIKEY
+// });
 
 
 // Create the service wrapper
-var assistant = new AssistantV2({
-  version: '2019-02-28',
-  authenticator: new IamAuthenticator({
-    apikey: process.env.ASSISTANT_IAM_APIKEY
-  }),
-  serviceUrl: process.env.ASSISTANT_URL,
-});
+var assistant = {};
 // const assistant = new AssistantV2({
 //   authenticator: new IamAuthenticator({ apikey: 'qpwUvPnQ2piomi3lGJPh4sqwa8ZvRtkEoG4qDjhlYxW1' }),
 //   serviceUrl: 'https://api.us-south.assistant.watson.cloud.ibm.com/instances/da5aab5f-2601-4bcc-8f03-a943d19dabb5',
@@ -116,12 +113,27 @@ var sessionId = '';
 
 // speech to text token endpoint
 app.use('/api/speech-to-text/token', function(req, res) {
-  return sttAuthenticator
-    .requestToken()
-    .then(({ result }) => {
-      res.json({ accessToken: result.access_token, url: process.env.SPEECH_TO_TEXT_URL });
-    })
-    .catch(console.error);
+
+  Redisclient.get('pm_watson_api_key', async (err, authData) => {
+    if (err) throw err;
+
+    if (authData) {
+        authData = JSON.parse(authData)
+        const sttAuthenticator = new IamTokenManager({
+          apikey: authData.speech_key
+        });
+        return sttAuthenticator
+        .requestToken()
+        .then(({ result }) => {
+          res.json({ accessToken: result.access_token, url: authData.speech_url });
+        })
+        .catch(console.error);
+    }
+    else {
+      return res.json({text:  null, status:true});
+    }
+  });
+  
 });
 /*
  * Endpoint to be call from the client side.
@@ -130,69 +142,157 @@ app.use('/api/speech-to-text/token', function(req, res) {
  */
 app.use(bodyParser.json());
 app.post('/api/message', function (req, res) {
-  
-  var assistantId = process.env.ASSISTANT_ID || '<assistant-id>';
-  if (!assistantId || assistantId === '<assistant-id>') {
-    return res.json({
-      'output': {
-        'text': 'The app has not been configured with a <b>ASSISTANT_ID</b> environment variable. Please refer to the '
-      }
-    });
-  }
+  Redisclient.get('pm_watson_api_key', async (err, authData) => {
+    if (err) throw err;
 
-  var textIn = '';
+    if (authData) {
+        authData = JSON.parse(authData)
+        const sttAuthenticator = new IamTokenManager({
+          apikey: authData.speech_key
+        });
+        var assistantId = authData.assistant_id;
+        if (!assistantId) {
+          return res.json({
+            'output': {
+              'text': 'The app has not been configured with a <b>ASSISTANT_ID</b> environment variable. Please refer to the '
+            }
+          });
+        }
 
-  if(req.body.input) {
-    textIn = req.body.input.text;
-  }
+        var textIn = '';
 
-  var payload = {
-    assistantId: assistantId,
-    sessionId: req.body.session_id,
-    input: {
-      message_type : 'text',
-      text : textIn,
+        if(req.body.input) {
+          textIn = req.body.input.text;
+        }
+
+        var payload = {
+          assistantId: assistantId,
+          sessionId: req.body.session_id,
+          input: {
+            message_type : 'text',
+            text : textIn,
+          }
+        };
+
+        if (req.body.firstCall) {
+          payload.context =  req.body.context || initContext;
+        } 
+        // else {
+        //   res.status(500).json('error message');
+        // }
+
+        // Send the input to the assistant service
+        assistant.message(payload)
+          .then(response => {
+            console.log(JSON.stringify(response.result, null, 2));
+            if(response.result){
+
+              return res.json({text: response.result.output.generic[0].text, data:response.result});
+            }
+            return res.json({text: 'I do not understand what you said', data:response.result});
+          })
+          .catch(err => {
+            console.log(err);
+          });
+
     }
-  };
-
-  if (req.body.firstCall) {
-    payload.context =  req.body.context || initContext;
-  } 
-  // else {
-  //   res.status(500).json('error message');
-  // }
-
-  // Send the input to the assistant service
-   assistant.message(payload)
-    .then(response => {
-      console.log(JSON.stringify(response.result, null, 2));
-      if(response.result){
-
-        return res.json({text: response.result.output.generic[0].text, data:response.result});
-      }
-      return res.json({text: 'I do not understand what you said', data:response.result});
-    })
-    .catch(err => {
-      console.log(err);
-    });
+    else {
+      return res.json({text:  null, status:true});
+    }
+  });
+  
 
   
 });
+app.post('/api/set_auth_key', function (req, res) {
 
-app.get('/api/session', function (req, res) {
+  if(!req.body.assistant_key || !req.body.assistant_id || !req.body.assistant_url || !req.body.speech_key || !req.body.speech_url){
+    res.status(401).json({
+      error: 'Partial request!, the psrameters is invalid',
+      body : req.body,
+    });
+  }
+
+  Redisclient.get('pm_watson_api_key', async (err, authData) => {
+    if (err) throw err;
+
+    // if (authData) {
+    //     authData = JSON.parse(authData)
+    //     return res.json({text: authData, status:true});
+    // }
+    // else {
+      let obj = {
+        assistant_key : req.body.assistant_key,
+        assistant_id : req.body.assistant_id,
+        assistant_url : req.body.assistant_url,
+        speech_key : req.body.speech_key,
+        speech_url : req.body.speech_url,
+      }
+      obj = JSON.stringify(obj)
+      Redisclient.set('pm_watson_api_key',obj);
+       assistant = new AssistantV2({
+        version: '2019-02-28',
+        authenticator: new IamAuthenticator({
+          apikey: req.body.assistant_key
+        }),
+        serviceUrl: req.body.assistant_url,
+      });
+      return res.json({text:  JSON.parse(obj), status:true});
+    // }
+  });
+  
+});
+app.get('/api/get_auth_key', function (req, res) {
 
   
-  async function asyncCall() {
-    var k = await assistant.createSession({
-          assistantId: '256ffa4d-5070-4dc8-9cb1-33d0b77873b2',
-        });
-        console.log(k.result)
-        sessionId = k.result;
-        return res.send(sessionId)
+  Redisclient.get('pm_watson_api_key', async (err, authData) => {
+    if (err) throw err;
 
+    if (authData) {
+        authData = JSON.parse(authData)
+        return res.json({text: authData, status:true});
     }
+    else {
+      return res.json({text:  null, status:true});
+    }
+  });
+
+  
+});
+app.get('/api/session', function (req, res) {
+  Redisclient.get('pm_watson_api_key', async (err, authData) => {
+    if (err) throw err;
+
+    if (authData) {
+        authData = JSON.parse(authData)
+        async function asyncCall() {
+          var k = await assistant.createSession({
+                assistantId: authData.assistant_id,
+              });
+              console.log(k.result)
+              sessionId = k.result;
+              return res.send(sessionId)
+      
+          }
+          
+          asyncCall();
+    }
+    else {
+      return res.json({text:  null, status:true});
+    }
+  });
+  
+  // async function asyncCall() {
+  //   var k = await assistant.createSession({
+  //         assistantId: '256ffa4d-5070-4dc8-9cb1-33d0b77873b2',
+  //       });
+  //       console.log(k.result)
+  //       sessionId = k.result;
+  //       return res.send(sessionId)
+
+  //   }
     
-    asyncCall();
+  //   asyncCall();
 
   
 });

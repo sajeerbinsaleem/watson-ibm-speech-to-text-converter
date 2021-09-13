@@ -37,7 +37,7 @@ var tunaMeetAPI = {
 		document.body.appendChild(newDiv);
 	},
 
-	loadAassistant: function(){
+	loadAassistant: function(assistant_key, assistant_id, assistant_url, speech_key, speech_url){
        // document.getElementById("tuna_meet_widget").style.display ="block";
         var tuna_chat = document.getElementById('tuna_chat_iframe');
 //var idoc = tuna_chat.contentWindow.document;
@@ -49,8 +49,17 @@ var tunaMeetAPI = {
         // tuna_object.action_type='open_chat';
         // tuna_object.user_id=user_id;
         // tuna_object.area_id=area_id;
-        tuna_chat.contentWindow.postMessage({
-            'action_type':'load_assistant'
+        // tuna_chat.contentWindow.postMessage({
+        //     'action_type':'load_assistant'
+        // }, "*");
+
+		tuna_chat.contentWindow.postMessage({
+            'action_type':'load_assistant',
+			'assistant_key' : assistant_key,
+			 'assistant_id' : assistant_id, 
+			 'assistant_url' : assistant_url, 
+			 'speech_key' : speech_key, 
+			 'speech_url' :speech_url
         }, "*");
 
 
@@ -77,6 +86,24 @@ var tunaMeetAPI = {
         // tuna_object.area_id=area_id;
         tuna_chat.contentWindow.postMessage({
             'action_type':'stop'
+        }, "*");
+
+
+	},
+	seApis: function(assistant_key, assistant_id, assistant_url, speech_key, speech_url){
+        //document.getElementById("tuna_meet_widget").style.display ="block";
+        var tuna_chat = document.getElementById('tuna_chat_iframe');
+        // var tuna_object={};
+        // tuna_object.action_type='open_chat';
+        // tuna_object.user_id=user_id;
+        // tuna_object.area_id=area_id;
+        tuna_chat.contentWindow.postMessage({
+            'action_type':'set_apis',
+			'assistant_key' : assistant_key,
+			 'assistant_id' : assistant_id, 
+			 'assistant_url' : assistant_url, 
+			 'speech_key' : speech_key, 
+			 'speech_url' :speech_url
         }, "*");
 
 
